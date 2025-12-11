@@ -1,5 +1,6 @@
 # 🕰️ chronsync - Lightweight Task Scheduler Daemon
 
+chronsyncは、**Chrono (時間) + cron + sync (同期)** から名付けられました。
 chronsyncは、Rustで構築された超軽量なCLIタスクスケジューラー（デーモン）です。
 JSON設定ファイルに基づき、cronライクなスケジュールで外部コマンドを永続的に実行します。
 設定ファイルの変更を即座に検知し、実行中のタスクを停止・再構築（リロード）するホットリロード機能を備えています。
@@ -114,13 +115,13 @@ cargo run
 
     ```bash
     # 設定の再読み込み
-    systemctl --user daemon-reload
+systemctl --user daemon-reload
 
     # サービスの起動
-    systemctl --user start chronsync
+systemctl --user start chronsync
 
     # 自動起動の有効化
-    systemctl --user enable chronsync
+systemctl --user enable chronsync
     ```
 
 3.  **ログの確認**
