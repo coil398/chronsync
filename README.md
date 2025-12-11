@@ -139,14 +139,20 @@ chronsync --user service start
 
 #### ログの確認 (Linux - Systemd)
 
-サービスのログは `journalctl` コマンドで確認できます。
+サービスのログは、`journalctl` コマンドを使う代わりに、`chronsync service log` コマンドで簡単に確認できます。
 
 ```bash
-# システムサービスのログを確認 (リアルタイム監視)
-journalctl -u chronsync -f
+# システムサービスのログを表示 (デフォルト20行、リアルタイム監視)
+sudo chronsync service log -f
 
-# ユーザーサービスのログを確認 (リアルタイム監視)
-journalctl --user -u chronsync -f
+# ユーザーサービスのログを表示 (デフォルト20行、リアルタイム監視)
+chronsync --user service log -f
+
+# システムサービスの最新100行を表示
+sudo chronsync service log -n 100
+
+# ユーザーサービスの最新50行を表示
+chronsync --user service log -n 50
 ```
 
 ---
