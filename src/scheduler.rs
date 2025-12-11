@@ -3,6 +3,7 @@ use cron::Schedule;
 use log::{error, info, warn};
 use reqwest::Client;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::process::Command;
 use tokio::task::JoinHandle;
@@ -66,6 +67,8 @@ impl TaskScheduler {
                 task.args,
                 task.timeout,
                 task.webhook_url,
+                task.cwd,
+                task.env,
             )
             .await;
 
@@ -82,6 +85,8 @@ impl TaskScheduler {
         args: Option<Vec<String>>,
         timeout: Option<u64>,
         webhook_url: Option<String>,
+        cwd: Option<String>,
+        env: Option<HashMap<String, String>>,
     ) {
         let mut job_running = true;
 
@@ -100,6 +105,8 @@ impl TaskScheduler {
                     args.as_deref().unwrap_or(&[]),
                     timeout,
                     webhook_url.as_deref(),
+                    cwd.as_deref(),
+                    env.as_ref(),
                 )
                 .await;
             } else {
@@ -118,13 +125,26 @@ impl TaskScheduler {
         args: &[String],
         timeout: Option<u64>,
         webhook_url: Option<&str>,
+        cwd: Option<&str>,
+        env: Option<&HashMap<String, String>>,
     ) {
         info!("[{}] -> Command starting: {} {:?}", name, command, args);
 
         let mut cmd_to_run = Command::new(command);
         cmd_to_run.args(args);
 
-        let child = match Command::new(command).args(args).spawn() {
+        if let Some(dir) = cwd {
+            cmd_to_run.current_dir(dir);
+            info!("[{}] CWD set to: {}", name, dir);
+        }
+
+        if let Some(envs) = env {
+            cmd_to_run.envs(envs);
+            let keys: Vec<&str> = envs.keys().map(|k| k.as_str()).collect();
+            info!("[{}] Envs set: {:?}", name, keys);
+        }
+
+        let child = match cmd_to_run.spawn() {
             Ok(c) => c,
             Err(e) => {
                 error!("[{}] -> Failed to spawn command '{}': {}", name, command, e);
