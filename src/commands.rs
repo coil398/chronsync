@@ -420,6 +420,34 @@ pub fn handle_service_command(args: ServiceArgs, user: bool) {
                 }
             }
         }
+        ServiceAction::Log(log_args) => {
+            let mut cmd = Command::new("journalctl");
+
+            if user {
+                cmd.arg("--user");
+            }
+
+            cmd.arg("-u").arg("chronsync");
+
+            if log_args.follow {
+                cmd.arg("-f");
+            }
+
+            cmd.arg("-n").arg(log_args.lines.to_string());
+
+            info!("Executing log command: {:?}", cmd);
+
+            let status = cmd.status().unwrap_or_else(|e| {
+                error!("Failed to execute journalctl: {}", e);
+                process::exit(1);
+            });
+
+            if !status.success() {
+                // journalctl returns non-zero if no entries found or error
+                // We don't need to panic, just log it.
+                // However, users might just Ctrl+C, which is fine.
+            }
+        }
     }
 }
 

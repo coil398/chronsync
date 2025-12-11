@@ -70,6 +70,18 @@ pub enum ServiceAction {
     Uninstall,
     Start,
     Stop,
+    Log(ServiceLogArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub struct ServiceLogArgs {
+    /// Follow the log output (tail -f)
+    #[arg(short, long)]
+    pub follow: bool,
+
+    /// Number of lines to show
+    #[arg(short = 'n', long, default_value = "20")]
+    pub lines: usize,
 }
 
 #[derive(clap::Args, Debug)]
