@@ -1,5 +1,6 @@
 use cron::Schedule;
 use serde::{Deserialize, Deserializer};
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
 use std::str::FromStr;
@@ -27,6 +28,10 @@ pub struct Task {
     pub timeout: Option<u64>,
 
     pub webhook_url: Option<String>,
+
+    pub cwd: Option<String>,
+
+    pub env: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

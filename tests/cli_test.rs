@@ -125,3 +125,42 @@ fn test_exec_command_unknown_task() {
         .failure()
         .stdout(predicate::str::contains("Task 'ghost_task' not found"));
 }
+
+#[test]
+fn test_cwd_and_env() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().to_str().unwrap().to_string();
+
+    let mut file = NamedTempFile::new().unwrap();
+    let config_json = format!(
+        r#"
+        {{
+             "tasks": [
+             {{
+                  "name": "env_test",
+                  "cron_schedule": "* * * * * *",
+                  "command": "sh",
+                  "args": ["-c", "echo CWD=$(pwd) && echo MY_VAR=$MY_ENV_VAR"],
+                  "cwd": "{}",
+                  "env": {{
+                      "MY_ENV_VAR": "hello_rust"
+                  }},
+                  "timeout": 5
+              }}
+             ]
+         }}"#,
+        temp_dir_path
+    );
+
+    writeln!(file, "{}", config_json).unwrap();
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_chronsync"));
+    cmd.arg("exec")
+        .arg("env_test")
+        .arg("--config-path")
+        .arg(file.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!("CWD={}", temp_dir_path)))
+        .stdout(predicate::str::contains("MY_VAR=hello_rust"));
+}
