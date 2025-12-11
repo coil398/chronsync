@@ -9,6 +9,8 @@ use directories::UserDirs;
 use log::{debug, error, info, LevelFilter};
 use scheduler::TaskScheduler;
 use simple_logger::SimpleLogger;
+use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -25,6 +27,7 @@ struct Cli {
 enum Commands {
     Run(RunArgs),
     List(ListArgs),
+    Init(InitArgs),
 }
 
 #[derive(clap::Args, Debug)]
@@ -35,6 +38,12 @@ struct RunArgs {
 
 #[derive(clap::Args, Debug)]
 struct ListArgs {
+    #[arg(short, long)]
+    config_path: Option<PathBuf>,
+}
+
+#[derive(clap::Args, Debug)]
+struct InitArgs {
     #[arg(short, long)]
     config_path: Option<PathBuf>,
 }
@@ -76,6 +85,9 @@ async fn main() {
         Commands::List(args) => {
             debug!("Dispatching to handle_list_command");
             handle_list_command(args).await;
+        }
+        Commands::Init(args) => {
+            handle_init_command(args).await;
         }
     }
 }
@@ -196,4 +208,82 @@ async fn handle_list_command(args: ListArgs) {
             process::exit(1);
         }
     }
+}
+
+async fn handle_init_command(args: InitArgs) {
+    debug!("Entered handle_init_command with args: {:?}", args);
+    let config_path = match args.config_path {
+        Some(p) => p,
+        None => match get_config_path() {
+            Ok(p) => p,
+            Err(e) => {
+                error!("Initialization Error: {}", e);
+                process::exit(1);
+            }
+        },
+    };
+
+    debug!("Resolved config path: {}", config_path.display());
+
+    let parent_dir = config_path.parent().unwrap_or_else(|| {
+        error!("Could not determine parent directory for config file.");
+        process::exit(1);
+    });
+    fs::create_dir_all(parent_dir).unwrap_or_else(|e| {
+        error!("Failed to create directory {}: {}", parent_dir.display(), e);
+        process::exit(1);
+    });
+
+    if config_path.exists() {
+        println!(
+            "Configuration file already exists at: {}",
+            config_path.display()
+        );
+        print!("Do you want to overwrite it? (y/N): ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+
+        let should_overwrite = input.trim().to_lowercase() == "y";
+
+        if !should_overwrite {
+            info!("Initialization cancelled by user.");
+            return;
+        }
+    }
+
+    let initial_config_content = r#"{
+        "tasks": [
+        {
+            "name": "sample_ping",
+            "cron_schedule": "*/10 * * * * *",
+            "command": "/bin/sh",
+            "args": [
+                "-c", "/bin/echo \"[Sample] Check at $(date)\""
+            ]
+        },
+        {
+            "name": "sample_cleanup",
+            "cron_schedule": "0 0 0 * * *",
+            "command": "usr/bin/find",
+            "args": ["/tmp", "-type", "f", "-atime", "+7", "-delete"]
+        }
+        ]
+    }"#;
+
+    fs::write(&config_path, initial_config_content).unwrap_or_else(|e| {
+        error!(
+            "Failed to write configuration file to {}: {}",
+            config_path.display(),
+            e
+        );
+        process::exit(1);
+    });
+
+    println!("\nSuccessfully created initial configuration file.");
+    println!("  Path: {}", config_path.display());
+    println!("\nNext steps:");
+    println!("1. Edit the file to define your tasks.");
+    println!("2. Run the daemon: `chronosync run`");
 }

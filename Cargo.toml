@@ -1,6 +1,6 @@
 [package]
 name = "chronsync"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 authors = ["t.kawase398@gmail.com"]
 license = "MIT"
