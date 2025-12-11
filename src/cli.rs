@@ -7,6 +7,9 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
+    #[arg(short = 't', long, global = true)]
+    pub worker_threads: Option<usize>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
