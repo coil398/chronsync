@@ -1,7 +1,6 @@
 use crate::config::{Config, Task};
 use cron::Schedule;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::process::Command;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
