@@ -4,19 +4,19 @@ mod config;
 mod watcher;
 use tokio::sync::mpsc;
 mod scheduler;
-use directories::ProjectDirs;
+use directories::UserDirs;
 use scheduler::TaskScheduler;
 use std::path::PathBuf;
 
 fn get_config_path() -> Result<PathBuf, String> {
-    if let Some(proj_dirs) = ProjectDirs::from("com", "coil398", "Chronosync") {
-        let config_dir = proj_dirs.config_dir();
-        let config_file = config_dir.join("config.json");
+    if let Some(user_dirs) = UserDirs::new() {
+        let home_dir = user_dirs.home_dir();
+        let config_path = home_dir.join(".config").join("chronosync").join("config.json");
 
-        return Ok(config_file);
+        return Ok(config_path);
     }
 
-    Err("Could not determine configuration directory path.".to_string())
+    Err("Could not determine user home directory.".to_string())
 }
 
 #[tokio::main]
