@@ -468,6 +468,7 @@ pub async fn handle_exec_command(args: ExecArgs) {
                 &task.command,
                 &task.args.as_deref().unwrap_or(&[]),
                 task.timeout,
+                task.webhook_url.as_deref(),
             )
             .await;
 

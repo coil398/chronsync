@@ -25,6 +25,8 @@ pub struct Task {
 
     #[serde(default)]
     pub timeout: Option<u64>,
+
+    pub webhook_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

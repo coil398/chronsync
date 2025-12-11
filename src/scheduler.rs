@@ -1,6 +1,8 @@
 use crate::config::{Config, Task};
 use cron::Schedule;
 use log::{error, info, warn};
+use reqwest::Client;
+use serde_json::json;
 use std::sync::{Arc, Mutex};
 use tokio::process::Command;
 use tokio::task::JoinHandle;
@@ -57,8 +59,15 @@ impl TaskScheduler {
         );
 
         let job_task = tokio::spawn(async move {
-            TaskScheduler::run_job_loop(name, schedule, task.command, task.args, task.timeout)
-                .await;
+            TaskScheduler::run_job_loop(
+                name,
+                schedule,
+                task.command,
+                task.args,
+                task.timeout,
+                task.webhook_url,
+            )
+            .await;
 
             handle_ref_for_job.lock().unwrap().take();
         });
@@ -72,6 +81,7 @@ impl TaskScheduler {
         command: String,
         args: Option<Vec<String>>,
         timeout: Option<u64>,
+        webhook_url: Option<String>,
     ) {
         let mut job_running = true;
 
@@ -89,6 +99,7 @@ impl TaskScheduler {
                     &command,
                     args.as_deref().unwrap_or(&[]),
                     timeout,
+                    webhook_url.as_deref(),
                 )
                 .await;
             } else {
@@ -101,7 +112,13 @@ impl TaskScheduler {
         }
     }
 
-    pub async fn execute_command(name: &str, command: &str, args: &[String], timeout: Option<u64>) {
+    pub async fn execute_command(
+        name: &str,
+        command: &str,
+        args: &[String],
+        timeout: Option<u64>,
+        webhook_url: Option<&str>,
+    ) {
         info!("[{}] -> Command starting: {} {:?}", name, command, args);
 
         let mut cmd_to_run = Command::new(command);
@@ -176,6 +193,15 @@ impl TaskScheduler {
                     if !stderr.trim().is_empty() {
                         error!("[{}] -> STDERR:\n{}", name, stderr.trim());
                     }
+
+                    if let Some(url) = webhook_url {
+                        let error_msg = format!(
+                            "Command exited with status: {}\nStderr: {}",
+                            output.status,
+                            stderr.trim()
+                        );
+                        TaskScheduler::send_alert(url, name, &error_msg).await;
+                    }
                 }
             }
             Err(e) => {
@@ -183,6 +209,30 @@ impl TaskScheduler {
                     "[{}] -> Execution error: Failed to run command '{}': {}",
                     name, command, e
                 );
+            }
+        }
+    }
+
+    async fn send_alert(webhook_url: &str, task_name: &str, message: &str) {
+        let client = Client::new();
+        let payload = json!({
+            "text": format!("**Chronsync Task Failed** \n\n**Task:** `{}`\n**Error** {}", task_name, message)
+        });
+
+        match client.post(webhook_url).json(&payload).send().await {
+            Ok(res) => {
+                if res.status().is_success() {
+                    info!("[{}] Webhook alert sent successfully.", task_name);
+                } else {
+                    error!(
+                        "[{}] Failed to send webhook. Status: {}",
+                        task_name,
+                        res.status()
+                    );
+                }
+            }
+            Err(e) => {
+                error!("[{}] Failed to send webhook: {}", task_name, e);
             }
         }
     }
