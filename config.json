@@ -7,7 +7,8 @@
       "args": [
         "-c",
         "/bin/echo \"Service check at: $(date)\""
-      ]
+      ],
+      "timeout": 5
     },
     {
       "name": "hourly_cleanup",
@@ -20,7 +21,8 @@
         "-mtime",
         "+7",
         "-delete"
-      ]
+      ],
+      "timeout": 60
     }
   ]
 }

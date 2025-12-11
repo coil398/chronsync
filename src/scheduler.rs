@@ -4,7 +4,7 @@ use log::{error, info, warn};
 use std::sync::{Arc, Mutex};
 use tokio::process::Command;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
+use tokio::time::{self, sleep, Duration};
 
 type JobHandle = Arc<Mutex<Option<JoinHandle<()>>>>;
 
@@ -57,7 +57,8 @@ impl TaskScheduler {
         );
 
         let job_task = tokio::spawn(async move {
-            TaskScheduler::run_job_loop(name, schedule, task.command, task.args).await;
+            TaskScheduler::run_job_loop(name, schedule, task.command, task.args, task.timeout)
+                .await;
 
             handle_ref_for_job.lock().unwrap().take();
         });
@@ -70,6 +71,7 @@ impl TaskScheduler {
         schedule: Schedule,
         command: String,
         args: Option<Vec<String>>,
+        timeout: Option<u64>,
     ) {
         let mut job_running = true;
 
@@ -82,8 +84,13 @@ impl TaskScheduler {
 
                 sleep(duration).await;
 
-                TaskScheduler::execute_command(&name, &command, args.as_deref().unwrap_or(&[]))
-                    .await;
+                TaskScheduler::execute_command(
+                    &name,
+                    &command,
+                    args.as_deref().unwrap_or(&[]),
+                    timeout,
+                )
+                .await;
             } else {
                 warn!(
                     "[{}] Schedule ended or failed to calculate next time.",
@@ -94,13 +101,67 @@ impl TaskScheduler {
         }
     }
 
-    async fn execute_command(name: &str, command: &str, args: &[String]) {
+    async fn execute_command(name: &str, command: &str, args: &[String], timeout: Option<u64>) {
         info!("[{}] -> Command starting: {} {:?}", name, command, args);
 
         let mut cmd_to_run = Command::new(command);
         cmd_to_run.args(args);
 
-        match cmd_to_run.output().await {
+        let child = match Command::new(command).args(args).spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                error!("[{}] -> Failed to spawn command '{}': {}", name, command, e);
+                return;
+            }
+        };
+        let child_pid = child.id();
+
+        let execution_future = child.wait_with_output();
+
+        let output_result = if let Some(s) = timeout {
+            info!("[{}] Running command with timeout: {}s", name, s);
+
+            let duration = Duration::from_secs(s);
+
+            match time::timeout(duration, execution_future).await {
+                Ok(result) => result,
+                Err(_) => {
+                    error!(
+                        "[{}] -> Command TIMEOUT after {} seconds. Killing process.",
+                        name, s
+                    );
+
+                    if let Some(pid) = child_pid {
+                        let kill_status = tokio::process::Command::new("kill")
+                            .arg("-9")
+                            .arg(pid.to_string())
+                            .status()
+                            .await;
+
+                        match kill_status {
+                            Ok(status) if status.success() => {
+                                error!("[{}] Child process PID {} killed successfully.", name, pid);
+                            }
+                            _ => {
+                                error!("[{}] Failed to kill child process PID {}.", name, pid);
+                            }
+                        }
+                    }
+
+                    let io_error = std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        format!("Command timed out after {} seconds", s),
+                    );
+
+                    Err(io_error)
+                }
+            }
+        } else {
+            info!("[{}] Running command (no timeout limit)", name);
+            execution_future.await
+        };
+
+        match output_result {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
