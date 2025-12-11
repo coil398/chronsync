@@ -1,20 +1,45 @@
 use config::load_config;
-use std::path::Path;
+use std::process;
 mod config;
 mod watcher;
 use tokio::sync::mpsc;
 mod scheduler;
+use directories::ProjectDirs;
 use scheduler::TaskScheduler;
+use std::path::PathBuf;
+
+fn get_config_path() -> Result<PathBuf, String> {
+    if let Some(proj_dirs) = ProjectDirs::from("com", "coil398", "Chronosync") {
+        let config_dir = proj_dirs.config_dir();
+        let config_file = config_dir.join("config.json");
+
+        return Ok(config_file);
+    }
+
+    Err("Could not determine configuration directory path.".to_string())
+}
 
 #[tokio::main]
 async fn main() {
-    let config_path = Path::new("config.json");
+    let config_path = match get_config_path() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Initialization Error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    if !config_path.exists() {
+        eprintln!("Initialization Error: Configuration file not found at path:");
+        eprintln!("-> Path: {}", config_path.display());
+        process::exit(1);
+    }
 
     let (tx_reload, mut rx_reload) = mpsc::channel::<()>(1);
 
     let mut scheduler = TaskScheduler::new();
 
-    let watcher_path = config_path.to_owned();
+    let watcher_path = config_path.clone();
     let tx_clone = tx_reload.clone();
 
     tokio::spawn(async move {
@@ -25,7 +50,7 @@ async fn main() {
 
     println!("[Main] Chronosync Daemon started.");
 
-    match load_config(config_path) {
+    match load_config(&config_path) {
         Ok(c) => {
             println!("[Main] Initial config loaded. {} tasks.", c.tasks.len());
             scheduler.reload_tasks(c);
@@ -41,7 +66,7 @@ async fn main() {
             Some(_) = rx_reload.recv() => {
                 println!("\n>>> CONFIG CHANGE DETECTED! RELOADING... <<<");
 
-                match load_config(config_path) {
+                match load_config(&config_path) {
                     Ok(new_config) => {
                         scheduler.reload_tasks(new_config);
                         println!("[Main] New configuration applied. Tasks reloaded.");
