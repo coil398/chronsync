@@ -100,16 +100,16 @@ async fn main() {
         }
         Commands::List(args) => {
             debug!("Dispatching to handle_list_command");
-            handle_list_command(args).await;
+            handle_list_command(args);
         }
         Commands::Init(args) => {
-            handle_init_command(args).await;
+            handle_init_command(args);
         }
         Commands::Edit(args) => {
-            handle_edit_command(args).await;
+            handle_edit_command(args);
         }
         Commands::Check(args) => {
-            handle_check_command(args).await;
+            handle_check_command(args);
         }
     }
 }
@@ -133,6 +133,17 @@ async fn handle_run_command(args: RunArgs) {
         error!("Initialization Error: Configuration file not found at path:");
         error!("-> Path: {}", config_path.display());
         process::exit(1);
+    }
+
+    match core_check_config(&config_path) {
+        Ok(_) => {
+            info!("Initial configuration validated successfully.");
+        }
+        Err(e) => {
+            error!("Initial configuration check failed. Cannot start daemon.");
+            eprintln!("\n{}\n", e);
+            process::exit(1);
+        }
     }
 
     let (tx_reload, mut rx_reload) = mpsc::channel::<()>(1);
@@ -185,7 +196,7 @@ async fn handle_run_command(args: RunArgs) {
     }
 }
 
-async fn handle_list_command(args: ListArgs) {
+fn handle_list_command(args: ListArgs) {
     debug!("Entered handle_list_command with args: {:?}", args);
     let config_path = match args.config_path {
         Some(p) => p,
@@ -232,7 +243,7 @@ async fn handle_list_command(args: ListArgs) {
     }
 }
 
-async fn handle_init_command(args: InitArgs) {
+fn handle_init_command(args: InitArgs) {
     debug!("Entered handle_init_command with args: {:?}", args);
     let config_path = match args.config_path {
         Some(p) => p,
@@ -312,21 +323,28 @@ async fn handle_init_command(args: InitArgs) {
 
 fn core_check_config(config_path: &PathBuf) -> Result<(), String> {
     if !config_path.exists() {
-        return Err(format!("Configuration file not found at: {}", config_path.display()));
+        return Err(format!(
+            "Configuration file not found at: {}",
+            config_path.display()
+        ));
     }
 
     match load_config(config_path) {
         Ok(config) => {
-            info!("Configuration check successful: {} tasks loaded.", config.tasks.len());
+            info!(
+                "Configuration check successful: {} tasks loaded.",
+                config.tasks.len()
+            );
             Ok(())
         }
-        Err(e) => {
-            Err(format!("Validation failed: Invalid JSON or Cron Schedule.\n  Details: {}", e))
-        }
+        Err(e) => Err(format!(
+            "Validation failed: Invalid JSON or Cron Schedule.\n  Details: {}",
+            e
+        )),
     }
 }
 
-async fn handle_edit_command(args: EditArgs) {
+fn handle_edit_command(args: EditArgs) {
     debug!("Entered handle_edit_command with args: {:?}", args);
     let config_path = match args.config_path {
         Some(p) => p,
@@ -371,9 +389,20 @@ async fn handle_edit_command(args: EditArgs) {
     }
 
     info!("Configuration file edited. The daemon will reload automatically.");
+
+    match core_check_config(&config_path) {
+        Ok(_) => {
+            info!("Configuration saved and validated successfully.");
+            info!("The daemon will reload automatically");
+        }
+        Err(e) => {
+            error!("\n Validation failed after editing! The daemon WILL NOT reload this file.");
+            eprintln!("{}\n", e)
+        }
+    }
 }
 
-async fn handle_check_command(args: CheckArgs) {
+fn handle_check_command(args: CheckArgs) {
     debug!("Entered handle_check_command with args: {:?}", args);
     let config_path = match args.config_path {
         Some(p) => p,
@@ -405,3 +434,4 @@ async fn handle_check_command(args: CheckArgs) {
         }
     }
 }
+
